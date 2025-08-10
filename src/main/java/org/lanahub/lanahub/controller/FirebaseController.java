@@ -4,9 +4,8 @@ import com.google.firebase.auth.UserRecord;
 import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseToken;
 
-import javax.annotation.processing.Generated;
-
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 
@@ -17,7 +16,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.lanahub.lanahub.model.User;
 import org.lanahub.lanahub.services.FirebaseService;
-import org.lanahub.lanahub.model.IdTokenRequest;
 import com.google.gson.Gson;
 import org.lanahub.lanahub.model.UserInfoResponse;
 import org.lanahub.lanahub.model.ResponseMsg;
@@ -39,6 +37,18 @@ public class FirebaseController {
         return firebaseService.getUserById(id);
     }
 
+    @GetMapping("/{collection}/record/{id}")
+    public Object getDocument(
+            @PathVariable String collection,
+            @PathVariable String id) throws Exception {
+        Object document = firebaseService.getDocumentById(collection, id);
+        if (document == null) {
+            logger.error("Document not found in collection: {}, id: {}", collection, id);
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(new Gson().toJson(document));
+    }
+
     @GetMapping("/all")
     public List<UserRecord> getAllUsers() throws FirebaseAuthException {
         logger.info("Fetching all users from Firebase");
@@ -55,22 +65,78 @@ public class FirebaseController {
         return users;
     }
 
-    @PostMapping("/register-user")
-    public ResponseEntity<String> createUser(@RequestBody User request) throws FirebaseAuthException, IOException {
-        logger.info("request.getEmail(): {}", request.getEmail());
+    @PostMapping(path = "/register-user", consumes = "multipart/form-data")
+    public ResponseEntity<String> createUser(@RequestParam("email") String email,
+            @RequestParam("role") String role,
+            @RequestParam("password") String password,
+            @RequestParam("fullName") String fullName,
+            @RequestParam("surName") String surName,
+            @RequestParam("suburb") String suburb,
+            @RequestParam("mobile") String mobile,
+            @RequestParam("city") String city,
+            @RequestParam(value = "gender", required = false) String gender,
+            @RequestParam(value = "profession", required = false) String profession,
+            @RequestParam(value = "nationality", required = false) String nationality,
+            @RequestParam(value = "longBio", required = false) String longBio,
+            @RequestParam(value = "websiteLink", required = false) String websiteLink,
+            @RequestParam(value = "experience", required = false) String experience,
+            @RequestParam(value = "address", required = false) String address,
+
+            @RequestParam(value = "profilePic", required = false) MultipartFile profilePic,
+            @RequestParam(value = "qualificationDoc", required = false) MultipartFile qualificationDoc,
+            @RequestParam(value = "policeClearance", required = false) MultipartFile policeClearance,
+            @RequestParam(value = "otherDocs1", required = false) MultipartFile otherDocs1,
+            @RequestParam(value = "otherDocs2", required = false) MultipartFile otherDocs2,
+            @RequestParam(value = "otherDocs3", required = false) MultipartFile otherDocs3)
+            throws FirebaseAuthException, IOException {
+        logger.info("request.getEmail(): {}", email);
 
         ResponseMsg responseMsg = new ResponseMsg();
+        User user = new User();
+        user.setEmail(email);
+        user.setRole(role);
+        user.setPassword(password);
+        user.setFullName(fullName);
+        user.setSurName(surName);
+        user.setSuburb(suburb);
+        user.setMobile(mobile);
+        user.setCity(city);
+        user.setGender(gender);
+        user.setProfession(profession);
+        user.setNationality(nationality);
+        user.setLongBio(longBio);
+        user.setWebsiteLink(websiteLink);
+        user.setExperience(experience);
+        user.setAddress(address);
 
-        var user = firebaseService.createUser(request.getEmail(), request.getPassword());
-        if (user == null || user.getUid() == null || user.getUid().isEmpty()) {
+        if (profilePic != null && !profilePic.isEmpty()) {
+            user.setProfilePic(profilePic.getBytes());
+        }
+        if (qualificationDoc != null && !qualificationDoc.isEmpty()) {
+            user.setQualificationDoc(qualificationDoc.getBytes());
+        }
+        if (policeClearance != null && !policeClearance.isEmpty()) {
+            user.setPoliceClearance(policeClearance.getBytes());
+        }
+        if (otherDocs1 != null && !otherDocs1.isEmpty()) {
+            user.setOtherDocs1(otherDocs1.getBytes());
+        }
+        if (otherDocs2 != null && !otherDocs2.isEmpty()) {
+            user.setOtherDocs2(otherDocs2.getBytes());
+        }
+        if (otherDocs3 != null && !otherDocs3.isEmpty()) {
+            user.setOtherDocs3(otherDocs3.getBytes());
+        }
+        var userRes = firebaseService.createUser(email, password);
+        if (userRes == null || userRes.getUid() == null || userRes.getUid().isEmpty()) {
             logger.error("Failed to create user in Firebase");
             responseMsg.setMessage("User creation failed");
             responseMsg.setCode("001");
             return ResponseEntity.badRequest().body(new Gson().toJson(responseMsg));
         }
 
-        firebaseService.setUserRole(user.getUid(), request.getRole());
-        String id = firebaseService.addUserDetails(user, request);
+        firebaseService.setUserRole(userRes.getUid(), role);
+        String id = firebaseService.addUserDetails(userRes, user);
         logger.info("User created successfully with UID: {}", id);
 
         if (id == null || id.isEmpty()) {
